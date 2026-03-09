@@ -74,7 +74,7 @@ module.exports = {
     // -------------------------
     // BUTTONS
     // -------------------------
-    if (interaction.isButton()) {
+    if (interaction.type === 3) {
 
       // OPEN TICKET
       if (interaction.customId.startsWith("ticket_open_")) {
