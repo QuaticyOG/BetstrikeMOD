@@ -13,8 +13,8 @@ async function loadEvents(client) {
       continue;
     }
 
-    if (event.once) client.once(event.name, (...args) => event.execute(client, ...args));
-    else client.on(event.name, (...args) => event.execute(client, ...args));
+    if (event.once) client.once(event.name, (...args) => event.execute(...args));
+    else client.on(event.name, (...args) => event.execute(...args));
   }
 
   logger.info(`Loaded ${eventFiles.length} events`);
