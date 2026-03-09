@@ -37,14 +37,17 @@ async function getNextTicketNumber(guildId) {
 
 module.exports = {
   name: Events.InteractionCreate,
+
   async execute(interaction) {
+
+    // BUTTONS
     if (interaction.isButton()) {
+
+      // OPEN TICKET
       if (interaction.customId.startsWith("ticket_open_")) {
+
         const categoryKey = interaction.customId.replace("ticket_open_", "");
         const config = ticketConfig.categories[categoryKey];
-        if (!config) {
-          return interaction.reply({ content: "Invalid ticket category.", ephemeral: true });
-        }
 
         const existing = await Ticket.findOne({
           guildId: interaction.guild.id,
@@ -54,11 +57,10 @@ module.exports = {
         });
 
         if (existing) {
-          const existingChannel = interaction.guild.channels.cache.get(existing.channelId);
+          const channel = interaction.guild.channels.cache.get(existing.channelId);
+
           return interaction.reply({
-            content: existingChannel
-              ? `You already have an open ${categoryKey} ticket: ${existingChannel}`
-              : `You already have an open ${categoryKey} ticket.`,
+            content: `You already have an open ticket: ${channel}`,
             ephemeral: true
           });
         }
@@ -67,40 +69,72 @@ module.exports = {
           .setCustomId(`ticket_modal_${categoryKey}`)
           .setTitle(config.modalTitle);
 
-        const rows = config.questions.slice(0, 5).map(question => {
-          const input = new TextInputBuilder()
-            .setCustomId(question.id)
-            .setLabel(question.label)
-            .setStyle(question.style === 2 ? TextInputStyle.Paragraph : TextInputStyle.Short)
-            .setRequired(Boolean(question.required));
+        const rows = config.questions.slice(0, 5).map(q => {
 
-          if (question.maxLength) input.setMaxLength(question.maxLength);
+          const input = new TextInputBuilder()
+            .setCustomId(q.id)
+            .setLabel(q.label)
+            .setStyle(q.style === 2 ? TextInputStyle.Paragraph : TextInputStyle.Short)
+            .setRequired(Boolean(q.required));
 
           return new ActionRowBuilder().addComponents(input);
+
         });
 
         modal.addComponents(...rows);
+
         return interaction.showModal(modal);
       }
 
+
+      // CLOSE BUTTON (ASK CONFIRMATION)
       if (interaction.customId === "ticket_close") {
+
+        const row = new ActionRowBuilder().addComponents(
+
+          new ButtonBuilder()
+            .setCustomId("ticket_close_confirm")
+            .setLabel("Close")
+            .setStyle(ButtonStyle.Danger),
+
+          new ButtonBuilder()
+            .setCustomId("ticket_close_cancel")
+            .setLabel("Cancel")
+            .setStyle(ButtonStyle.Secondary)
+
+        );
+
+        return interaction.reply({
+          content: "Are you sure you would like to close this ticket?",
+          components: [row],
+          ephemeral: true
+        });
+      }
+
+
+      // CANCEL CLOSE
+      if (interaction.customId === "ticket_close_cancel") {
+
+        return interaction.update({
+          content: "Ticket close cancelled.",
+          components: []
+        });
+      }
+
+
+      // CONFIRM CLOSE
+      if (interaction.customId === "ticket_close_confirm") {
+
         const ticket = await Ticket.findOne({
           guildId: interaction.guild.id,
-          channelId: interaction.channel.id,
-          status: "open"
+          channelId: interaction.channel.id
         });
 
         if (!ticket) {
-          return interaction.reply({ content: "This is not an open ticket.", ephemeral: true });
-        }
-
-        const canClose =
-          interaction.member.permissions.has(PermissionFlagsBits.ManageChannels) ||
-          interaction.user.id === ticket.userId ||
-          ticketConfig.staffRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
-
-        if (!canClose) {
-          return interaction.reply({ content: "You do not have permission to close this ticket.", ephemeral: true });
+          return interaction.reply({
+            content: "This is not a ticket.",
+            ephemeral: true
+          });
         }
 
         ticket.status = "closed";
@@ -108,92 +142,125 @@ module.exports = {
         ticket.closedAt = new Date();
         await ticket.save();
 
-        await interaction.channel.permissionOverwrites.edit(ticket.userId, {
-          ViewChannel: false,
-          SendMessages: false
+
+        const closedEmbed = new EmbedBuilder()
+          .setColor("Yellow")
+          .setDescription(`Ticket Closed by ${interaction.user}`);
+
+        await interaction.channel.send({
+          embeds: [closedEmbed]
         });
 
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("ticket_delete")
-            .setLabel("Delete")
-            .setEmoji("🗑️")
-            .setStyle(ButtonStyle.Danger)
-        );
-
-        await interaction.reply({
-          content: `Ticket closed by <@${interaction.user.id}>. Staff can now delete it.`,
-          components: [row]
-        });
-
-        const logChannel = interaction.guild.channels.cache.get(ticketConfig.logChannelId);
-        if (logChannel) {
-          await logChannel.send(`🔒 Ticket closed: <#${ticket.channelId}> by <@${interaction.user.id}>`);
-        }
-
-        return;
-      }
-
-      if (interaction.customId === "ticket_delete") {
-        const ticket = await Ticket.findOne({
-          guildId: interaction.guild.id,
-          channelId: interaction.channel.id
-        });
-
-        if (!ticket) {
-          return interaction.reply({ content: "This is not a ticket channel.", ephemeral: true });
-        }
-
-        const canDelete =
-          interaction.member.permissions.has(PermissionFlagsBits.ManageChannels) ||
-          ticketConfig.staffRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
-
-        if (!canDelete) {
-          return interaction.reply({ content: "You do not have permission to delete this ticket.", ephemeral: true });
-        }
-
-        await interaction.reply({ content: "Deleting ticket in 5 seconds..." });
 
         const transcriptPath = await buildTranscript(interaction.channel);
 
         const transcriptFile = new AttachmentBuilder(transcriptPath);
+
         const transcriptChannel =
           interaction.guild.channels.cache.get(ticketConfig.transcriptChannelId) ||
           interaction.guild.channels.cache.get(ticketConfig.logChannelId);
 
         if (transcriptChannel) {
           await transcriptChannel.send({
-            content: `🧾 Transcript for ticket #${ticket.ticketNumber} (${ticket.categoryKey}) | User: <@${ticket.userId}> | Closed by: ${ticket.closedBy ? `<@${ticket.closedBy}>` : "Unknown"}`,
+            content: `Transcript saved from ${interaction.channel.name}`,
             files: [transcriptFile]
           });
         }
 
-        const logChannel = interaction.guild.channels.cache.get(ticketConfig.logChannelId);
-        if (logChannel) {
-          await logChannel.send(`🗑️ Ticket deleted: #${ticket.ticketNumber} (${ticket.categoryKey}) by <@${interaction.user.id}>`);
+
+        const controlPanel = new ActionRowBuilder().addComponents(
+
+          new ButtonBuilder()
+            .setCustomId("ticket_reopen")
+            .setLabel("Open")
+            .setEmoji("🔓")
+            .setStyle(ButtonStyle.Secondary),
+
+          new ButtonBuilder()
+            .setCustomId("ticket_delete")
+            .setLabel("Delete")
+            .setEmoji("⛔")
+            .setStyle(ButtonStyle.Danger)
+
+        );
+
+        await interaction.channel.send({
+          content: "Support team ticket controls",
+          components: [controlPanel]
+        });
+
+        return interaction.update({
+          content: "Ticket closed.",
+          components: []
+        });
+      }
+
+
+      // REOPEN TICKET
+      if (interaction.customId === "ticket_reopen") {
+
+        const ticket = await Ticket.findOne({
+          guildId: interaction.guild.id,
+          channelId: interaction.channel.id
+        });
+
+        if (!ticket) return;
+
+        ticket.status = "open";
+        await ticket.save();
+
+        return interaction.reply("🔓 Ticket reopened.");
+      }
+
+
+      // DELETE TICKET
+      if (interaction.customId === "ticket_delete") {
+
+        const ticket = await Ticket.findOne({
+          guildId: interaction.guild.id,
+          channelId: interaction.channel.id
+        });
+
+        if (!ticket) {
+          return interaction.reply({
+            content: "This is not a ticket.",
+            ephemeral: true
+          });
+        }
+
+        await interaction.reply("Deleting ticket in 5 seconds...");
+
+        const transcriptPath = await buildTranscript(interaction.channel);
+
+        const transcriptFile = new AttachmentBuilder(transcriptPath);
+
+        const transcriptChannel =
+          interaction.guild.channels.cache.get(ticketConfig.transcriptChannelId) ||
+          interaction.guild.channels.cache.get(ticketConfig.logChannelId);
+
+        if (transcriptChannel) {
+          await transcriptChannel.send({
+            content: `Transcript for ticket #${ticket.ticketNumber}`,
+            files: [transcriptFile]
+          });
         }
 
         ticket.status = "deleted";
         await ticket.save();
 
-        setTimeout(async () => {
-          try {
-            await interaction.channel.delete();
-          } catch (err) {
-            console.error("Failed to delete ticket channel:", err);
-          }
+        setTimeout(() => {
+          interaction.channel.delete();
         }, 5000);
-
-        return;
       }
     }
 
+
+    // MODAL SUBMIT
     if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
+
       const categoryKey = interaction.customId.replace("ticket_modal_", "");
+
       const config = ticketConfig.categories[categoryKey];
-      if (!config) {
-        return interaction.reply({ content: "Invalid ticket category.", ephemeral: true });
-      }
 
       const existing = await Ticket.findOne({
         guildId: interaction.guild.id,
@@ -203,109 +270,149 @@ module.exports = {
       });
 
       if (existing) {
-        const existingChannel = interaction.guild.channels.cache.get(existing.channelId);
+        const channel = interaction.guild.channels.cache.get(existing.channelId);
+
         return interaction.reply({
-          content: existingChannel
-            ? `You already have an open ${categoryKey} ticket: ${existingChannel}`
-            : `You already have an open ${categoryKey} ticket.`,
+          content: `You already have an open ticket: ${channel}`,
           ephemeral: true
         });
       }
 
-      const answers = config.questions.map(question => ({
-        questionId: question.id,
-        label: question.label,
-        answer: interaction.fields.getTextInputValue(question.id)
+
+      const answers = config.questions.map(q => ({
+        label: q.label,
+        answer: interaction.fields.getTextInputValue(q.id)
       }));
 
+
       const ticketNumber = await getNextTicketNumber(interaction.guild.id);
+
       const username = sanitizeChannelPart(interaction.user.username);
+
       const categoryName = sanitizeChannelPart(categoryKey);
+
       const channelName = `${username}-${ticketNumber}-${categoryName}`;
 
+
       const permissionOverwrites = [
+
         {
           id: interaction.guild.roles.everyone.id,
           deny: [PermissionFlagsBits.ViewChannel]
         },
+
         {
           id: interaction.user.id,
           allow: [
             PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.AttachFiles,
-            PermissionFlagsBits.EmbedLinks
+            PermissionFlagsBits.SendMessages
           ]
         }
+
       ];
 
+
       for (const roleId of ticketConfig.staffRoleIds) {
+
         permissionOverwrites.push({
+
           id: roleId,
+
           allow: [
             PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.AttachFiles,
-            PermissionFlagsBits.EmbedLinks,
-            PermissionFlagsBits.ManageMessages
+            PermissionFlagsBits.SendMessages
           ]
+
         });
+
       }
 
+
       const channel = await interaction.guild.channels.create({
+
         name: channelName,
+
         type: ChannelType.GuildText,
+
         parent: ticketConfig.parentCategoryId,
+
         permissionOverwrites
+
       });
+
 
       const ticket = await Ticket.create({
+
         guildId: interaction.guild.id,
+
         userId: interaction.user.id,
+
         channelId: channel.id,
+
         ticketNumber,
-        categoryKey,
-        answers
+
+        categoryKey
+
       });
 
+
       const embed = new EmbedBuilder()
-        .setTitle(`${config.modalTitle}`)
-        .setDescription("Support will be with you shortly.\nTo close this ticket press the close button.")
+        .setTitle(config.modalTitle)
+        .setDescription("Support will be with you shortly.")
         .addFields(
           answers.map(a => ({
             name: a.label,
-            value: a.answer.length > 1024 ? `${a.answer.slice(0, 1020)}...` : a.answer
+            value: a.answer
           }))
         )
         .setColor(0x2b2d31)
         .setFooter({ text: `Ticket #${ticket.ticketNumber}` });
 
+
       const row = new ActionRowBuilder().addComponents(
+
         new ButtonBuilder()
           .setCustomId("ticket_close")
           .setLabel("Close")
           .setEmoji("🔒")
           .setStyle(ButtonStyle.Secondary)
+
       );
 
-      const staffMentions = ticketConfig.staffRoleIds.map(id => `<@&${id}>`).join(" ");
+
+      const staffMentions = ticketConfig.staffRoleIds.map(r => `<@&${r}>`).join(" ");
+
 
       await channel.send({
-        content: `${interaction.user} ${staffMentions}`.trim(),
+
+        content: `${interaction.user} ${staffMentions}`,
+
         embeds: [embed],
+
         components: [row]
+
       });
 
+
       const logChannel = interaction.guild.channels.cache.get(ticketConfig.logChannelId);
+
       if (logChannel) {
-        await logChannel.send(`📩 Ticket opened: ${channel} | User: <@${interaction.user.id}> | Category: ${categoryKey} | Ticket #${ticket.ticketNumber}`);
+
+        await logChannel.send(
+
+          `📩 Ticket opened: ${channel} | User: ${interaction.user.tag} | Ticket #${ticket.ticketNumber}`
+
+        );
+
       }
 
-      await interaction.reply({
+
+      return interaction.reply({
+
         content: `Your ticket has been created: ${channel}`,
+
         ephemeral: true
+
       });
     }
   }
