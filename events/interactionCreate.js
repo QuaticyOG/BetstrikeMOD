@@ -70,7 +70,6 @@ async execute(interaction) {
   if (interaction.isModalSubmit && interaction.isModalSubmit()) {
     // your modal logic continues below
   }
-}
 
 
     // -------------------------
