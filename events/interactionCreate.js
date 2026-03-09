@@ -349,7 +349,9 @@ async execute(interaction) {
       const channel = await interaction.guild.channels.create({
         name: channelName,
         type: ChannelType.GuildText,
-        parent: ticketConfig.parentCategoryId,
+        const config = await GuildConfig.findOne({ guildId: interaction.guild.id });
+
+        parent: config?.ticketCategoryId
         permissionOverwrites
       });
 
