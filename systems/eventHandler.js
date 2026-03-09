@@ -3,6 +3,7 @@ const path = require("path");
 const { logger } = require("../utils/logger");
 
 async function loadEvents(client) {
+
   const eventsPath = path.join(__dirname, "..", "events");
   const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
 
