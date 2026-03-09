@@ -39,26 +39,41 @@ module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction) {
-    // SLASH COMMAND HANDLER
-if (interaction.isCommand()) {
 
-  const command = interaction.client.commands.get(interaction.commandName);
+    // -------------------------
+    // SLASH COMMANDS
+    // -------------------------
+    if (interaction.isChatInputCommand()) {
 
-  if (!command) return;
+      const command = interaction.client.commands.get(interaction.commandName);
 
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
+      if (!command) return;
 
-    await interaction.reply({
-      content: "There was an error executing this command.",
-      ephemeral: true
-    });
-  }
+      try {
+        await command.execute(interaction);
+      } catch (error) {
+        console.error(error);
 
-}
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({
+            content: "There was an error executing this command.",
+            ephemeral: true
+          });
+        } else {
+          await interaction.reply({
+            content: "There was an error executing this command.",
+            ephemeral: true
+          });
+        }
+      }
+
+      return;
+    }
+
+
+    // -------------------------
     // BUTTONS
+    // -------------------------
     if (interaction.isButton()) {
 
       // OPEN TICKET
@@ -105,7 +120,7 @@ if (interaction.isCommand()) {
       }
 
 
-      // CLOSE BUTTON (ASK CONFIRMATION)
+      // CLOSE BUTTON
       if (interaction.customId === "ticket_close") {
 
         const row = new ActionRowBuilder().addComponents(
@@ -273,11 +288,12 @@ if (interaction.isCommand()) {
     }
 
 
+    // -------------------------
     // MODAL SUBMIT
+    // -------------------------
     if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
 
       const categoryKey = interaction.customId.replace("ticket_modal_", "");
-
       const config = ticketConfig.categories[categoryKey];
 
       const existing = await Ticket.findOne({
@@ -296,19 +312,15 @@ if (interaction.isCommand()) {
         });
       }
 
-
       const answers = config.questions.map(q => ({
         label: q.label,
         answer: interaction.fields.getTextInputValue(q.id)
       }));
 
-
       const ticketNumber = await getNextTicketNumber(interaction.guild.id);
 
       const username = sanitizeChannelPart(interaction.user.username);
-
       const categoryName = sanitizeChannelPart(categoryKey);
-
       const channelName = `${username}-${ticketNumber}-${categoryName}`;
 
 
@@ -333,44 +345,30 @@ if (interaction.isCommand()) {
       for (const roleId of ticketConfig.staffRoleIds) {
 
         permissionOverwrites.push({
-
           id: roleId,
-
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages
           ]
-
         });
 
       }
 
 
       const channel = await interaction.guild.channels.create({
-
         name: channelName,
-
         type: ChannelType.GuildText,
-
         parent: ticketConfig.parentCategoryId,
-
         permissionOverwrites
-
       });
 
 
       const ticket = await Ticket.create({
-
         guildId: interaction.guild.id,
-
         userId: interaction.user.id,
-
         channelId: channel.id,
-
         ticketNumber,
-
         categoryKey
-
       });
 
 
@@ -402,13 +400,9 @@ if (interaction.isCommand()) {
 
 
       await channel.send({
-
         content: `${interaction.user} ${staffMentions}`,
-
         embeds: [embed],
-
         components: [row]
-
       });
 
 
@@ -417,20 +411,15 @@ if (interaction.isCommand()) {
       if (logChannel) {
 
         await logChannel.send(
-
           `📩 Ticket opened: ${channel} | User: ${interaction.user.tag} | Ticket #${ticket.ticketNumber}`
-
         );
 
       }
 
 
       return interaction.reply({
-
         content: `Your ticket has been created: ${channel}`,
-
         ephemeral: true
-
       });
     }
   }
