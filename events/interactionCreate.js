@@ -38,37 +38,39 @@ async function getNextTicketNumber(guildId) {
 module.exports = {
   name: Events.InteractionCreate,
 
-  async execute(interaction) {
+async execute(interaction) {
 
-    // -------------------------
-    // SLASH COMMANDS
-    // -------------------------
-    if (interaction.type === 2) {
+  // ---- Slash Commands ----
+  if (interaction.isChatInputCommand && interaction.isChatInputCommand()) {
 
-      const command = interaction.client.commands.get(interaction.commandName);
+    const command = interaction.client.commands.get(interaction.commandName);
+    if (!command) return;
 
-      if (!command) return;
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error("Slash command error:", error);
 
-      try {
-        await command.execute(interaction);
-      } catch (error) {
-        console.error(error);
-
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({
-            content: "There was an error executing this command.",
-            ephemeral: true
-          });
-        } else {
-          await interaction.reply({
-            content: "There was an error executing this command.",
-            ephemeral: true
-          });
-        }
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: "Error executing command.", ephemeral: true });
+      } else {
+        await interaction.reply({ content: "Error executing command.", ephemeral: true });
       }
-
-      return;
     }
+
+    return;
+  }
+
+  // ---- Buttons ----
+  if (interaction.isButton && interaction.isButton()) {
+    // your button logic continues below
+  }
+
+  // ---- Modals ----
+  if (interaction.isModalSubmit && interaction.isModalSubmit()) {
+    // your modal logic continues below
+  }
+}
 
 
     // -------------------------
