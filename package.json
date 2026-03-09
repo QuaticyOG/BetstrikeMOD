@@ -1,0 +1,19 @@
+{
+  "name": "modular-discord-bot",
+  "version": "1.0.0",
+  "description": "A production-ready modular Discord bot with moderation, leveling, tickets, reaction roles, welcome system, logging, utilities, and alt detection.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "discord-alt-detector": "^1.0.4",
+    "discord.js": "^14.25.1",
+    "dotenv": "^16.6.1",
+    "mongoose": "^9.2.0"
+  }
+}
