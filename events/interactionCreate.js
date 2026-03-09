@@ -291,7 +291,7 @@ module.exports = {
     // -------------------------
     // MODAL SUBMIT
     // -------------------------
-    if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
+    if (interaction.type === 5 && interaction.customId.startsWith("ticket_modal_")) {
 
       const categoryKey = interaction.customId.replace("ticket_modal_", "");
       const config = ticketConfig.categories[categoryKey];
