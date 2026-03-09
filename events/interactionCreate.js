@@ -61,16 +61,6 @@ async execute(interaction) {
     return;
   }
 
-  // ---- Buttons ----
-  if (interaction.isButton && interaction.isButton()) {
-    // your button logic continues below
-  }
-
-  // ---- Modals ----
-  if (interaction.isModalSubmit && interaction.isModalSubmit()) {
-    // your modal logic continues below
-  }
-
 
     // -------------------------
     // BUTTONS
