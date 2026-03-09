@@ -43,7 +43,7 @@ module.exports = {
     // -------------------------
     // SLASH COMMANDS
     // -------------------------
-    if (interaction.isChatInputCommand()) {
+    if (interaction.type === 2) {
 
       const command = interaction.client.commands.get(interaction.commandName);
 
