@@ -16,6 +16,7 @@ const ticketConfig = require("../config/tickets");
 const Ticket = require("../models/Ticket");
 const TicketCounter = require("../models/TicketCounter");
 const { buildTranscript } = require("../utils/transcript");
+const GuildConfig = require("../models/GuildConfig");
 
 function sanitizeChannelPart(str) {
   return str
@@ -346,23 +347,16 @@ async execute(interaction) {
       }
 
 
-      const channel = await interaction.guild.channels.create({
-        name: channelName,
-        type: ChannelType.GuildText,
-        const config = await GuildConfig.findOne({ guildId: interaction.guild.id });
+const GuildConfig = require("../models/GuildConfig");
 
-        parent: config?.ticketCategoryId
-        permissionOverwrites
-      });
+const guildConfig = await GuildConfig.findOne({ guildId: interaction.guild.id });
 
-
-      const ticket = await Ticket.create({
-        guildId: interaction.guild.id,
-        userId: interaction.user.id,
-        channelId: channel.id,
-        ticketNumber,
-        categoryKey
-      });
+const channel = await interaction.guild.channels.create({
+  name: channelName,
+  type: ChannelType.GuildText,
+  parent: guildConfig?.ticketCategoryId || ticketConfig.parentCategoryId,
+  permissionOverwrites
+});
 
 
       const embed = new EmbedBuilder()
